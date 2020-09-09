@@ -38,7 +38,17 @@ func (rec *TFRecord) Checksum() error {
 }
 
 type TFRecordState struct {
-	buf bufReader
+	// TFRecord header: little-endian u64 length, u32 length-CRC. Only the
+	// prefix of length headerRead is valid.
+	header [headerLength]byte
+	// Number of bytes of header that have actually been read.
+	headerRead int
+	// Everything past the header in the TFRecord: the data buffer, plus a
+	// little-endian u32 CRC of the data buffer. Only the prefix of length
+	// dataPlusFooterRead is valid.
+	dataPlusFooter []byte
+	// Number of bytes of dataPlusFooter that have actually been read.
+	dataPlusFooterRead int
 }
 
 // ReadRecord attempts to read a TFRecord, behaving nicely in the face of
@@ -55,36 +65,58 @@ func ReadRecord(statePtr **TFRecordState, r io.Reader) (*TFRecord, error) {
 	if *statePtr == nil {
 		*statePtr = new(TFRecordState)
 	}
-	var state *bufReader = &(*statePtr).buf
+	state := *statePtr
 
-	if err := state.ExtendTo(r, headerLength); err != nil {
-		return nil, err
-	}
-	lengthBuf := state.Data()[lengthOffset:lengthCRCOffset]
-	lengthCRC := binary.LittleEndian.Uint32(state.Data()[lengthCRCOffset:dataOffset])
-	if actualCRC := computeMaskedCRC(lengthBuf); actualCRC != lengthCRC {
-		return nil, status.Errorf(codes.DataLoss, "length CRC mismatch; cannot read rest of file: got %#x, want %#x", actualCRC, lengthCRC)
-	}
-	length := binary.LittleEndian.Uint64(lengthBuf)
+	if state.headerRead < headerLength {
+		dst := state.header[state.headerRead:]
+		if err := readRemaining(r, dst, &state.headerRead); err != nil {
+			return nil, err
+		}
 
-	totalLengthUint64 := uint64(headerLength) + length + uint64(footerLength)
-	totalLength := int(totalLengthUint64)
-	if uint64(totalLength) != totalLengthUint64 {
-		return nil, status.Errorf(codes.OutOfRange, "record too large for system: %v", totalLengthUint64)
-	}
-	if err := state.ExtendTo(r, totalLength); err != nil {
-		return nil, err
+		lengthBuf := state.header[:lengthCRCOffset]
+		lengthCRCBuf := state.header[lengthCRCOffset:]
+		lengthCRC := binary.LittleEndian.Uint32(lengthCRCBuf)
+		if actualCRC := computeMaskedCRC(lengthBuf); actualCRC != lengthCRC {
+			return nil, status.Errorf(codes.DataLoss, "length CRC mismatch; cannot read rest of file: got %#x, want %#x", actualCRC, lengthCRC)
+		}
+		length := binary.LittleEndian.Uint64(lengthBuf)
+
+		dataPlusFooterLengthUint64 := length + uint64(footerLength)
+		dataPlusFooterLength := int(dataPlusFooterLengthUint64)
+		if uint64(dataPlusFooterLength) != dataPlusFooterLengthUint64 {
+			return nil, status.Errorf(codes.OutOfRange, "record too large for system: %v", dataPlusFooterLengthUint64)
+		}
+		state.dataPlusFooter = make([]byte, dataPlusFooterLength)
 	}
 
-	// Cast to int is safe because totalLength (which is greater) fits in
-	// int, from above.
-	endOfData := headerLength + int(length)
+	if state.dataPlusFooterRead < len(state.dataPlusFooter) {
+		dst := state.dataPlusFooter
+		if state.dataPlusFooterRead > 0 {
+			dst = dst[state.dataPlusFooterRead:]
+		}
+		if err := readRemaining(r, dst, &state.dataPlusFooterRead); err != nil {
+			return nil, err
+		}
+	}
 
-	dataBuf := state.Data()[headerLength:endOfData]
-	dataCRC := binary.LittleEndian.Uint32(state.Data()[endOfData:])
+	dataLength := len(state.dataPlusFooter) - footerLength
+	dataBuf := state.dataPlusFooter[:dataLength]
+	dataCRC := binary.LittleEndian.Uint32(state.dataPlusFooter[dataLength:])
 	result := TFRecord{
 		Data:      dataBuf,
 		maskedCRC: dataCRC,
 	}
 	return &result, nil
+}
+
+func readRemaining(r io.Reader, buf []byte, readPtr *int) error {
+	n, err := io.ReadFull(r, buf)
+	*readPtr += n
+	if err == io.EOF || err == io.ErrUnexpectedEOF {
+		return io.EOF
+	}
+	if err != nil {
+		return err
+	}
+	return nil
 }
