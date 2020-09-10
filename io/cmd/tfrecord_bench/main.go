@@ -19,6 +19,9 @@ var bufsize = flag.Int("bufsize", 8192, "bufio.NewReaderSize capacity")
 
 var checksum = flag.Bool("checksum", false, "validate TFRecord payloads against CRC-32")
 
+// https://blog.twitch.tv/en/2019/04/10/go-memory-ballast-how-i-learnt-to-stop-worrying-and-love-the-heap-26c2462549a2/
+var ballast = flag.Int("ballast", 0, "bytes of ballast to allocate and hold for program lifetime")
+
 func main() {
 	flag.Parse()
 	args := flag.Args()
@@ -26,6 +29,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "must specify event file path as only argument\n")
 		os.Exit(1)
 	}
+
+	ballastBuf := make([]byte, *ballast)
 
 	// Profiling structure copied from "go doc runtime/pprof".
 	if *cpuprofile != "" {
@@ -54,6 +59,8 @@ func main() {
 		}
 		fmt.Println("done with memory profile")
 	}
+
+	fmt.Printf("ballast len: %v\n", len(ballastBuf))
 }
 
 func ReadAllRecords(fileName string) {
