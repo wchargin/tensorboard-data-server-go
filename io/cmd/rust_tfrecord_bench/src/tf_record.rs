@@ -1,5 +1,5 @@
 use byteorder::{ByteOrder, LittleEndian};
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 
 use crate::masked_crc::{compute_crc, MaskedCrc};
 
@@ -57,6 +57,22 @@ impl TfRecord {
         } else {
             Err(ChecksumError { got, want })
         }
+    }
+
+    /// Writes this TFRecord back to serialized form. This includes the header and footer in
+    /// addition to the raw payload.
+    ///
+    /// The data checksum is taken from the original stored value and is not re-computed from the
+    /// data buffer. Thus, if the original record was corrupt, then the newly written record will
+    /// be corrupt, too.
+    #[allow(dead_code)]
+    pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
+        let length_field = (self.data.len() as u64).to_le_bytes();
+        w.write_all(&length_field)?;
+        w.write_all(&compute_crc(&length_field).0.to_le_bytes())?;
+        w.write_all(&self.data)?;
+        w.write_all(&self.data_crc.0.to_le_bytes())?;
+        Ok(())
     }
 }
 
