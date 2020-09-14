@@ -36,6 +36,32 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v2
 
+      - name: Check out TensorBoard protos
+        uses: actions/checkout@v2
+        with:
+          repository: tensorflow/tensorboard
+          ref: 3010b2c6afba6abbf68cf3f759c31d7b70d8daf9
+          path: ./tmp/tensorboard
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v1
+        with:
+          version: '3.13.0'
+
+      - name: Bootstrap Go modules
+        run: ./build_protos.sh --bootstrap
+
+      - name: Install protoc-gen-go
+        run: |
+          go get github.com/golang/protobuf/protoc-gen-go
+          which protoc-gen-go
+
+      - name: Compile proto definitions to Go source code
+        run: ./build_protos.sh ./tmp/tensorboard
+
+      - name: Remove TensorBoard repository  # to avoid building anything in it
+        run: rm -rf ./tmp/tensorboard
+
       - name: Build
         run: go build -v ./...
 
