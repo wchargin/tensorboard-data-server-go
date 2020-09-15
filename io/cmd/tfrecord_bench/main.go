@@ -9,6 +9,9 @@ import (
 	"runtime"
 	"runtime/pprof"
 
+	"github.com/golang/protobuf/proto"
+
+	event_go_proto "github.com/tensorflow/tensorflow/tensorflow/go/core/util/event_go_proto"
 	tbio "github.com/wchargin/tensorboard-data-server/io"
 )
 
@@ -18,6 +21,7 @@ var memprofile = flag.String("memprofile", "", "write memory profile to this fil
 var bufsize = flag.Int("bufsize", 8192, "bufio.NewReaderSize capacity")
 
 var checksum = flag.Bool("checksum", false, "validate TFRecord payloads against CRC-32")
+var parseProto = flag.Bool("parseproto", false, "parse protos as tensorboard.Event")
 
 // https://blog.twitch.tv/en/2019/04/10/go-memory-ballast-how-i-learnt-to-stop-worrying-and-love-the-heap-26c2462549a2/
 var ballast = flag.Int("ballast", 0, "bytes of ballast to allocate and hold for program lifetime")
@@ -95,6 +99,12 @@ func ProcessOneRecord(r io.Reader) (payloadSize int, more bool) {
 	if *checksum {
 		if err := rec.Checksum(); err != nil {
 			fmt.Fprintf(os.Stderr, "checksum failure: %v\n", err)
+		}
+	}
+	if *parseProto {
+		var event event_go_proto.Event
+		if err := proto.Unmarshal(rec.Data, &event); err != nil {
+			fmt.Printf("not a valid Event proto: %v", err)
 		}
 	}
 	return len(rec.Data), true
