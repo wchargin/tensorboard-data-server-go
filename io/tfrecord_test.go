@@ -11,6 +11,32 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+func TestNewWriteReadRoundtrip(t *testing.T) {
+	data := []byte("\x1a\x0dbrain.Event:2")
+	input := NewTFRecord(data)
+	if err := input.Checksum(); err != nil {
+		t.Errorf("input.Checksum(): got %v, want nil", err)
+	}
+	var buf bytes.Buffer
+	if err := input.Write(&buf); err != nil {
+		t.Fatalf("input.Write(&buf): got %v, want nil", err)
+	}
+	if bs := input.ByteSize(); bs != buf.Len() {
+		t.Errorf("predicted ByteSize != actual length: got %v, want %v", bs, buf.Len())
+	}
+	var state *TFRecordState
+	output, err := ReadRecord(&state, &buf)
+	if err != nil {
+		t.Fatalf("ReadRecord(&state, &buf): %v", err)
+	}
+	if !bytes.Equal(output.Data, input.Data) {
+		t.Errorf("round-trip: got %q, want %q", string(output.Data), string(input.Data))
+	}
+	if buf.Len() != 0 {
+		t.Errorf("left-over buffer: got %q, want empty", buf.Bytes())
+	}
+}
+
 func TestReadRecordSuccess(t *testing.T) {
 	// Event file with `tf.summary.scalar("accuracy", 0.99, step=77)`
 	// dumped via `xxd logs/*`.

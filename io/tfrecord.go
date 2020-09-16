@@ -27,6 +27,42 @@ type TFRecord struct {
 	maskedCRC uint32
 }
 
+// NewTFRecord creates a TFRecord from an in-memory buffer, computing its
+// checksum.
+func NewTFRecord(data []byte) TFRecord {
+	return NewTFRecordChecksum(data, computeMaskedCRC(data))
+}
+
+// NewTFRecordChecksum creates a TFRecord from an in-memory buffer and
+// pre-computed checksum. The checksum is not validated, so calling Checksum()
+// on the resulting record may fail.
+func NewTFRecordChecksum(data []byte, maskedCRC uint32) TFRecord {
+	return TFRecord{Data: data, maskedCRC: maskedCRC}
+}
+
+// Write writes the serialized TFRecord form. The stored data checksum is used,
+// so if the stored checksum is inaccurate then the written checksum will be,
+// too. Write only returns an error if the underlying writer does.
+func (rec *TFRecord) Write(w io.Writer) error {
+	lengthBuf := make([]byte, 8)
+	binary.LittleEndian.PutUint64(lengthBuf, uint64(len(rec.Data)))
+	if _, err := w.Write(lengthBuf); err != nil {
+		return err
+	}
+	lengthCRC := computeMaskedCRC(lengthBuf)
+	if err := binary.Write(w, binary.LittleEndian, lengthCRC); err != nil {
+		return err
+	}
+
+	if _, err := w.Write(rec.Data); err != nil {
+		return err
+	}
+	if err := binary.Write(w, binary.LittleEndian, rec.maskedCRC); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Checksum validates the integrity of the record by computing its CRC-32 and
 // checking it against the expected value. It returns an error if the CRCs do
 // not match.
@@ -35,6 +71,13 @@ func (rec *TFRecord) Checksum() error {
 		return status.Errorf(codes.DataLoss, "data CRC mismatch: got %#x, want %#x", actualMaskedCRC, rec.maskedCRC)
 	}
 	return nil
+}
+
+// ByteSize returns the size of the serialized form of the record: i.e., the
+// number of bytes that would be written by Write. This is the length of its
+// Data plus the overhead of the TFRecord format.
+func (rec *TFRecord) ByteSize() int {
+	return headerLength + footerLength + len(rec.Data)
 }
 
 type TFRecordState struct {
