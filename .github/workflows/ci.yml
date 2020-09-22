@@ -8,10 +8,10 @@ on:
   pull_request: {}
 
 jobs:
-  # Separate "lint" and "build" workflows so that lint failure don't block
-  # tests from running. See also "continue-on-error" feature request:
+  # Separate "fmt" and "build" workflows so that lint failure don't block tests
+  # from running. See also "continue-on-error" feature request:
   # https://github.community/t/continue-on-error-allow-failure-ui-indication/16773/11
-  lint:
+  fmt:
     runs-on: ubuntu-latest
     steps:
       - name: Set up Go environment
