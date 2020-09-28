@@ -29,32 +29,53 @@ const (
 	Abort
 )
 
+// ReaderBuilder specifies options for a Reader.
+type ReaderBuilder struct {
+	// File is the input stream for the event file.
+	File io.Reader
+}
+
+type readerState struct {
+	// Results is the input end of Reader.Results.
+	Results chan<- EventResult
+	// Results is the input end of Reader.Asleep.
+	Asleep chan<- bool
+	// Wake is the output end of Reader.Wake.
+	Wake <-chan WakeAction
+}
+
 // Reader reads TFRecords from an event file and parses them as Event protos.
 // It expects that the file that it's reading is being actively written, and as
 // such merely dozes off at EOF rather than exiting entirely. It can be awoken
 // by its owner later: e.g., after some amount of time has passed.
 type Reader struct {
-	// File is the input stream for the event file.
-	File io.Reader
 	// Results is an output channel for each event read from the file. If
 	// this ever emits a fatal error, the owner should expect all future
 	// interactions with these channels to block forever.
-	Results chan<- EventResult
+	Results <-chan EventResult
 	// Asleep is an output channel that sees "true" when the file has been
 	// read to its end, for now. It never sees "false".
-	Asleep chan<- bool
+	Asleep <-chan bool
 	// Wake is an input channel that sees a wake action when it should stop
 	// being asleep.
-	Wake <-chan WakeAction
+	Wake chan<- WakeAction
 }
 
-// Start reads the full contents of the event file, then goes to sleep until
-// woken, then starts again. Start must only be called once per reader. You
-// should spawn Start as a goroutine.
-func (efr *Reader) Start() {
+// Start starts a reader in a new goroutine. It reads the full contents of the
+// event file, then goes to sleep until woken, then starts again in a loop.
+func (b ReaderBuilder) Start() *Reader {
+	results := make(chan EventResult)
+	asleep := make(chan bool)
+	wake := make(chan WakeAction)
+	rs := &readerState{Results: results, Asleep: asleep, Wake: wake}
+	go rs.start(b.File)
+	return &Reader{Results: results, Asleep: asleep, Wake: wake}
+}
+
+func (efr *readerState) start(file io.Reader) {
 	var recordState *tbio.TFRecordState
 	for {
-		record, err := tbio.ReadRecord(&recordState, efr.File)
+		record, err := tbio.ReadRecord(&recordState, file)
 		if err == io.EOF {
 			efr.Asleep <- true
 			switch <-efr.Wake {
@@ -78,7 +99,7 @@ func (efr *Reader) Start() {
 	}
 }
 
-func (efr *Reader) readEvent(record *tbio.TFRecord) (*event_go_proto.Event, error) {
+func (efr *readerState) readEvent(record *tbio.TFRecord) (*event_go_proto.Event, error) {
 	if err := record.Checksum(); err != nil {
 		return nil, err
 	}

@@ -49,20 +49,16 @@ func TestGrowingEventFile(t *testing.T) {
 	buf.Reset()
 	buf.ReadFrom(buf1)
 
-	results := make(chan EventResult)
-	asleep := make(chan bool)
-	wake := make(chan WakeAction)
-	efr := &Reader{File: &buf, Results: results, Asleep: asleep, Wake: wake}
-	go efr.Start()
+	efr := ReaderBuilder{File: &buf}.Start()
 
 	// First read should read a full record.
 	select {
-	case got := <-results:
+	case got := <-efr.Results:
 		want := EventResult{Event: input1}
 		if !proto.Equal(got.Event, want.Event) || got.Err != nil || got.Fatal {
 			t.Errorf("first read: got %+v, want %+v", got, want)
 		}
-	case <-asleep:
+	case <-efr.Asleep:
 		t.Fatalf("got Asleep, want first result")
 	case <-time.After(time.Second):
 		t.Fatalf("no interaction after 1s; want first result")
@@ -70,34 +66,34 @@ func TestGrowingEventFile(t *testing.T) {
 
 	// Second read should progress partially, then sleep due to truncation.
 	select {
-	case got := <-results:
+	case got := <-efr.Results:
 		t.Fatalf("unexpected result: got %+v, want first sleep", got)
-	case <-asleep:
+	case <-efr.Asleep:
 	case <-time.After(time.Second):
 		t.Fatalf("no interaction after 1s; want first sleep")
 	}
 
 	// Wake, even though no new data has been written yet. Should go right
 	// back to sleep.
-	wake <- Resume
+	efr.Wake <- Resume
 	select {
-	case got := <-results:
+	case got := <-efr.Results:
 		t.Fatalf("unexpected result: got %+v, want second sleep", got)
-	case <-asleep:
+	case <-efr.Asleep:
 	case <-time.After(time.Second):
 		t.Fatalf("no interaction after 1s; want second sleep")
 	}
 
 	// Wake with new data. Should resume from previous truncation.
 	buf.ReadFrom(buf2)
-	wake <- Resume
+	efr.Wake <- Resume
 	select {
-	case got := <-results:
+	case got := <-efr.Results:
 		want := EventResult{Event: input2}
 		if !proto.Equal(got.Event, want.Event) || got.Err != nil || got.Fatal {
 			t.Errorf("second read: got %+v, want %+v", got, want)
 		}
-	case <-asleep:
+	case <-efr.Asleep:
 		t.Fatalf("got Asleep, want second result")
 	case <-time.After(time.Second):
 		t.Fatalf("no interaction after 1s; want second result")
@@ -105,21 +101,21 @@ func TestGrowingEventFile(t *testing.T) {
 
 	// Third read is another full event (identical to the second one).
 	select {
-	case got := <-results:
+	case got := <-efr.Results:
 		want := EventResult{Event: input2}
 		if !proto.Equal(got.Event, want.Event) || got.Err != nil || got.Fatal {
 			t.Errorf("third read: got %+v, want %+v", got, want)
 		}
-	case <-asleep:
+	case <-efr.Asleep:
 		t.Fatalf("got Asleep, want third result")
 	case <-time.After(time.Second):
 		t.Fatalf("no interaction after 1s; want third result")
 	}
 
 	select {
-	case got := <-results:
+	case got := <-efr.Results:
 		t.Fatalf("unexpected result: got %+v, want third sleep", got)
-	case <-asleep:
+	case <-efr.Asleep:
 	case <-time.After(time.Second):
 		t.Fatalf("no interaction after 1s; want third sleep")
 	}
@@ -138,20 +134,16 @@ func TestEventFileWithBadRecordLength(t *testing.T) {
 
 	okRecord.Write(&buf)
 
-	results := make(chan EventResult)
-	asleep := make(chan bool)
-	wake := make(chan WakeAction)
-	efr := &Reader{File: &buf, Results: results, Asleep: asleep, Wake: wake}
-	go efr.Start()
+	efr := ReaderBuilder{File: &buf}.Start()
 
 	// First read should succeed.
 	select {
-	case got := <-results:
+	case got := <-efr.Results:
 		want := EventResult{Event: inputEvent}
 		if !proto.Equal(got.Event, want.Event) || got.Err != nil || got.Fatal {
 			t.Errorf("first read: got %+v, want %+v", got, want)
 		}
-	case <-asleep:
+	case <-efr.Asleep:
 		t.Fatalf("got Asleep, want first result")
 	case <-time.After(time.Second):
 		t.Fatalf("no interaction after 1s; want first result")
@@ -159,12 +151,12 @@ func TestEventFileWithBadRecordLength(t *testing.T) {
 
 	// Second read should fail fatally.
 	select {
-	case got := <-results:
+	case got := <-efr.Results:
 		wantMsgSubstr := "length CRC mismatch"
 		if got.Event != nil || got.Err == nil || !strings.Contains(got.Err.Error(), wantMsgSubstr) || !got.Fatal {
 			t.Errorf("first read: got %+v, want fatal failure with %q", got, wantMsgSubstr)
 		}
-	case <-asleep:
+	case <-efr.Asleep:
 		t.Fatalf("got Asleep, want second result")
 	case <-time.After(time.Second):
 		t.Fatalf("no interaction after 1s; want second result")
@@ -172,11 +164,11 @@ func TestEventFileWithBadRecordLength(t *testing.T) {
 
 	// Reader should now be dead.
 	select {
-	case got := <-results:
+	case got := <-efr.Results:
 		t.Errorf("got result %+v, want no interaction", got)
-	case <-asleep:
+	case <-efr.Asleep:
 		t.Errorf("got <-Asleep, want no interaction")
-	case wake <- Resume:
+	case efr.Wake <- Resume:
 		t.Errorf("got Wake<-, want no interaction")
 	default:
 	}
@@ -191,20 +183,16 @@ func TestEventFileWithBadRecordData(t *testing.T) {
 	buf.Bytes()[okRecord.ByteSize()-1] ^= 0x55
 	okRecord.Write(&buf)
 
-	results := make(chan EventResult)
-	asleep := make(chan bool)
-	wake := make(chan WakeAction)
-	efr := &Reader{File: &buf, Results: results, Asleep: asleep, Wake: wake}
-	go efr.Start()
+	efr := ReaderBuilder{File: &buf}.Start()
 
 	// First read should fail non-fatally.
 	select {
-	case got := <-results:
+	case got := <-efr.Results:
 		wantMsgSubstr := "data CRC mismatch"
 		if got.Event != nil || got.Err == nil || !strings.Contains(got.Err.Error(), wantMsgSubstr) || got.Fatal {
 			t.Errorf("first read: got %+v, want non-fatal failure with %q", got, wantMsgSubstr)
 		}
-	case <-asleep:
+	case <-efr.Asleep:
 		t.Fatalf("got Asleep, want first result")
 	case <-time.After(time.Second):
 		t.Fatalf("no interaction after 1s; want first result")
@@ -212,21 +200,21 @@ func TestEventFileWithBadRecordData(t *testing.T) {
 
 	// Second read should succeed.
 	select {
-	case got := <-results:
+	case got := <-efr.Results:
 		want := EventResult{Event: inputEvent}
 		if !proto.Equal(got.Event, want.Event) || got.Err != nil || got.Fatal {
 			t.Errorf("second read: got %+v, want %+v", got, want)
 		}
-	case <-asleep:
+	case <-efr.Asleep:
 		t.Fatalf("got Asleep, want second result")
 	case <-time.After(time.Second):
 		t.Fatalf("no interaction after 1s; want second result")
 	}
 
 	select {
-	case got := <-results:
+	case got := <-efr.Results:
 		t.Fatalf("unexpected result: got %+v, want sleep", got)
-	case <-asleep:
+	case <-efr.Asleep:
 	case <-time.After(time.Second):
 		t.Fatalf("no interaction after 1s; want sleep")
 	}
@@ -241,20 +229,16 @@ func TestEventFileWithBadProto(t *testing.T) {
 	okRecord := tbio.NewTFRecord(marshalHard(t, inputEvent))
 	okRecord.Write(&buf)
 
-	results := make(chan EventResult)
-	asleep := make(chan bool)
-	wake := make(chan WakeAction)
-	efr := &Reader{File: &buf, Results: results, Asleep: asleep, Wake: wake}
-	go efr.Start()
+	efr := ReaderBuilder{File: &buf}.Start()
 
 	// First read should fail non-fatally.
 	select {
-	case got := <-results:
+	case got := <-efr.Results:
 		wantMsgSubstr := "reserved wire type"
 		if got.Event != nil || got.Err == nil || !strings.Contains(got.Err.Error(), wantMsgSubstr) || got.Fatal {
 			t.Errorf("first read: got %+v, want non-fatal failure with %q", got, wantMsgSubstr)
 		}
-	case <-asleep:
+	case <-efr.Asleep:
 		t.Fatalf("got Asleep, want first result")
 	case <-time.After(time.Second):
 		t.Fatalf("no interaction after 1s; want first result")
@@ -262,21 +246,21 @@ func TestEventFileWithBadProto(t *testing.T) {
 
 	// Second read should succeed.
 	select {
-	case got := <-results:
+	case got := <-efr.Results:
 		want := EventResult{Event: inputEvent}
 		if !proto.Equal(got.Event, want.Event) || got.Err != nil || got.Fatal {
 			t.Errorf("second read: got %+v, want %+v", got, want)
 		}
-	case <-asleep:
+	case <-efr.Asleep:
 		t.Fatalf("got Asleep, want second result")
 	case <-time.After(time.Second):
 		t.Fatalf("no interaction after 1s; want second result")
 	}
 
 	select {
-	case got := <-results:
+	case got := <-efr.Results:
 		t.Fatalf("unexpected result: got %+v, want sleep", got)
-	case <-asleep:
+	case <-efr.Asleep:
 	case <-time.After(time.Second):
 		t.Fatalf("no interaction after 1s; want sleep")
 	}
@@ -285,36 +269,32 @@ func TestEventFileWithBadProto(t *testing.T) {
 func TestWakeAbort(t *testing.T) {
 	var buf bytes.Buffer
 
-	results := make(chan EventResult)
-	asleep := make(chan bool)
-	wake := make(chan WakeAction)
-	efr := &Reader{File: &buf, Results: results, Asleep: asleep, Wake: wake}
-	go efr.Start()
+	efr := ReaderBuilder{File: &buf}.Start()
 
 	select {
-	case got := <-results:
+	case got := <-efr.Results:
 		t.Fatalf("unexpected result: got %+v, want first sleep", got)
-	case <-asleep:
+	case <-efr.Asleep:
 	case <-time.After(time.Second):
 		t.Fatalf("no interaction after 1s; want first sleep")
 	}
 
-	wake <- Resume
+	efr.Wake <- Resume
 
 	select {
-	case got := <-results:
+	case got := <-efr.Results:
 		t.Fatalf("unexpected result: got %+v, want second sleep", got)
-	case <-asleep:
+	case <-efr.Asleep:
 	case <-time.After(time.Second):
 		t.Fatalf("no interaction after 1s; want second sleep")
 	}
 
-	wake <- Abort
+	efr.Wake <- Abort
 
 	select {
-	case got := <-results:
+	case got := <-efr.Results:
 		t.Fatalf("unexpected result: got %+v, want dead", got)
-	case <-asleep:
+	case <-efr.Asleep:
 		t.Fatalf("unexpected result: got sleep, want dead")
 	default:
 	}
