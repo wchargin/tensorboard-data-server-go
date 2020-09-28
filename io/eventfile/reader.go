@@ -39,7 +39,7 @@ type readerState struct {
 	// Results is the input end of Reader.Results.
 	Results chan<- EventResult
 	// Results is the input end of Reader.Asleep.
-	Asleep chan<- bool
+	Asleep chan<- struct{}
 	// Wake is the output end of Reader.Wake.
 	Wake <-chan WakeAction
 }
@@ -53,9 +53,9 @@ type Reader struct {
 	// this ever emits a fatal error, the owner should expect all future
 	// interactions with these channels to block forever.
 	Results <-chan EventResult
-	// Asleep is an output channel that sees "true" when the file has been
-	// read to its end, for now. It never sees "false".
-	Asleep <-chan bool
+	// Asleep is an output channel that sees unit when the file has been
+	// read to its end, for now.
+	Asleep <-chan struct{}
 	// Wake is an input channel that sees a wake action when it should stop
 	// being asleep.
 	Wake chan<- WakeAction
@@ -65,7 +65,7 @@ type Reader struct {
 // contents of the event file, then goes to sleep again.
 func (b ReaderBuilder) Start() *Reader {
 	results := make(chan EventResult)
-	asleep := make(chan bool)
+	asleep := make(chan struct{})
 	wake := make(chan WakeAction)
 	rs := &readerState{Results: results, Asleep: asleep, Wake: wake}
 	go rs.start(b.File)
@@ -83,7 +83,7 @@ func (efr *readerState) start(file io.Reader) {
 	for {
 		record, err := tbio.ReadRecord(&recordState, file)
 		if err == io.EOF {
-			efr.Asleep <- true
+			efr.Asleep <- struct{}{}
 			switch <-efr.Wake {
 			case Resume:
 				continue
