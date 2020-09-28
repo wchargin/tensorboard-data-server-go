@@ -50,6 +50,7 @@ func TestGrowingEventFile(t *testing.T) {
 	buf.ReadFrom(buf1)
 
 	efr := ReaderBuilder{File: &buf}.Start()
+	efr.Wake <- Resume
 
 	// First read should read a full record.
 	select {
@@ -135,6 +136,7 @@ func TestEventFileWithBadRecordLength(t *testing.T) {
 	okRecord.Write(&buf)
 
 	efr := ReaderBuilder{File: &buf}.Start()
+	efr.Wake <- Resume
 
 	// First read should succeed.
 	select {
@@ -184,6 +186,7 @@ func TestEventFileWithBadRecordData(t *testing.T) {
 	okRecord.Write(&buf)
 
 	efr := ReaderBuilder{File: &buf}.Start()
+	efr.Wake <- Resume
 
 	// First read should fail non-fatally.
 	select {
@@ -230,6 +233,7 @@ func TestEventFileWithBadProto(t *testing.T) {
 	okRecord.Write(&buf)
 
 	efr := ReaderBuilder{File: &buf}.Start()
+	efr.Wake <- Resume
 
 	// First read should fail non-fatally.
 	select {
@@ -270,6 +274,7 @@ func TestWakeAbort(t *testing.T) {
 	var buf bytes.Buffer
 
 	efr := ReaderBuilder{File: &buf}.Start()
+	efr.Wake <- Resume
 
 	select {
 	case got := <-efr.Results:
@@ -297,6 +302,18 @@ func TestWakeAbort(t *testing.T) {
 	case <-efr.Asleep:
 		t.Fatalf("unexpected result: got sleep, want dead")
 	default:
+	}
+}
+
+func TestImmediateAbort(t *testing.T) {
+	bufContents := "do not read me"
+	buf := bytes.NewBufferString(bufContents)
+
+	efr := ReaderBuilder{File: buf}.Start()
+	efr.Wake <- Abort
+
+	if buf.String() != bufContents {
+		t.Errorf("buf.String(): got %v, want %v", buf.String(), bufContents)
 	}
 }
 

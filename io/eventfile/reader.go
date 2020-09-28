@@ -61,8 +61,8 @@ type Reader struct {
 	Wake chan<- WakeAction
 }
 
-// Start starts a reader in a new goroutine. It reads the full contents of the
-// event file, then goes to sleep until woken, then starts again in a loop.
+// Start starts a reader in a new goroutine. Once woken, it reads the full
+// contents of the event file, then goes to sleep again.
 func (b ReaderBuilder) Start() *Reader {
 	results := make(chan EventResult)
 	asleep := make(chan bool)
@@ -74,6 +74,12 @@ func (b ReaderBuilder) Start() *Reader {
 
 func (efr *readerState) start(file io.Reader) {
 	var recordState *tbio.TFRecordState
+	switch <-efr.Wake {
+	case Resume:
+		// let's go
+	case Abort:
+		return
+	}
 	for {
 		record, err := tbio.ReadRecord(&recordState, file)
 		if err == io.EOF {
