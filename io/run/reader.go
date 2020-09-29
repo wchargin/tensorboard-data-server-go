@@ -42,6 +42,8 @@ type ReaderBuilder struct {
 	// BufSize controls the size of the reader buffer on the underlying
 	// event file. It's optional; zero means to use a default.
 	BufSize int
+	// ChanBuf controls the buffer size on the output channel.
+	ChanBuf int
 }
 
 // Reader reads events from all event files in a directory and streams their
@@ -93,7 +95,7 @@ func (b ReaderBuilder) Start() *Reader {
 	if bufSize != 0 {
 		newBufioReader = func(r io.Reader) *bufio.Reader { return bufio.NewReaderSize(r, bufSize) }
 	}
-	out := make(chan ValueResult)
+	out := make(chan ValueResult, b.ChanBuf)
 	st := readerState{
 		fs:             b.FS,
 		dir:            b.Dir,
