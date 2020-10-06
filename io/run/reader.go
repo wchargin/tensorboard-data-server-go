@@ -20,9 +20,9 @@ const eventFileInfix = "tfevents"
 // A ValueDatum holds a Summary.Value protobuf with the step and wall time from
 // the enclosing event.
 type ValueDatum struct {
-	Step     mem.Step
-	WallTime float64
-	Value    *spb.Summary_Value
+	EventStep     mem.Step
+	EventWallTime float64
+	Value         *spb.Summary_Value
 }
 
 // A ValueResult is either a non-nil Datum plus a nil Err or a nil Datum plus a
@@ -196,9 +196,9 @@ func (rr *Reader) readfrom(file string) {
 func (rr *Reader) sendValues(ev *epb.Event) {
 	for _, v := range mem.EventValues(ev, rr.mds) {
 		datum := &ValueDatum{
-			Step:     mem.Step(ev.Step),
-			WallTime: ev.WallTime,
-			Value:    v,
+			EventStep:     mem.Step(ev.Step),
+			EventWallTime: ev.WallTime,
+			Value:         v,
 		}
 		rr.out <- ValueResult{Datum: datum}
 	}
