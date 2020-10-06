@@ -20,6 +20,7 @@ func main() {
 	}
 	rundir := os.Args[1]
 	rr := run.ReaderBuilder{FS: fs.OS{}, Dir: rundir}.Start()
+	acc := run.NewAccumulator(rr)
 	stdin := bufio.NewReader(os.Stdin)
 	counts := make(map[string]int)
 	for {
@@ -28,21 +29,9 @@ func main() {
 			rr.Reload()
 			close(c)
 		}()
-	events:
-		for {
-			select {
-			case res := <-rr.Out:
-				if res.Err != nil {
-					fmt.Fprintf(os.Stderr, "read error: %v\n", res)
-				} else {
-					counts[res.Datum.Value.GetTag()]++
-				}
-			case <-c:
-				break events
-			}
-		}
+		<-c
 
-		mds := rr.MetadataStore()
+		mds := acc.List()
 		tags := make([]string, len(mds))
 		{
 			i := 0
@@ -50,13 +39,19 @@ func main() {
 				tags[i] = k
 				i++
 			}
-			sort.Strings(tags)
-			for _, tag := range tags {
-				s := mds[tag].String()
-				if len(s) > 60 {
-					s = s[:57] + "..."
-				}
-				fmt.Printf("%v <%v>: n=%v, meta=%v\n", tag, mds[tag].GetDataClass(), counts[tag], s)
+		}
+		sort.Strings(tags)
+		for _, tag := range tags {
+			s := mds[tag].String()
+			if len(s) > 60 {
+				s = s[:57] + "..."
+			}
+			fmt.Printf("%v <%v>: n=%v, meta=%v\n", tag, mds[tag].GetDataClass(), counts[tag], s)
+			sample := acc.Sample(tag)
+			if len(sample) > 0 {
+				firstStep := sample[0].EventStep
+				lastStep := sample[len(sample)-1].EventStep
+				fmt.Printf("\tn=%d, firstStep=%d, lastStep=%d\n", len(sample), firstStep, lastStep)
 			}
 		}
 
