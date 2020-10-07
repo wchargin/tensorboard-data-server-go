@@ -22,6 +22,10 @@ const (
 	footerLength    int = 4
 )
 
+// A TFRecord is an in-memory representation of a completely read TFRecord. Its
+// Data contains the decoded buffer contents. The record internally has a
+// stored CRC, which is as originally read from the file or given at
+// construction time. It may or may not match the Data.
 type TFRecord struct {
 	Data      []byte
 	maskedCRC uint32
@@ -80,6 +84,7 @@ func (rec *TFRecord) ByteSize() int {
 	return headerLength + footerLength + len(rec.Data)
 }
 
+// TFRecordState is the reentrance structure for ReadRecord.
 type TFRecordState struct {
 	// TFRecord header: little-endian u64 length, u32 length-CRC. Only the
 	// prefix of length headerRead is valid.

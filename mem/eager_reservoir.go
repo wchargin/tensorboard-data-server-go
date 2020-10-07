@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-// Type EagerReservoir describes the contract for a naive reservoir sampling
+// EagerReservoir describes the contract for a naive reservoir sampling
 // algorithm (data structure) over StepIndexed values. An EagerReservoir must
 // inspect every record in the stream. Preemption occurs implicitly whenever
 // the Step value of a record does not increase.
@@ -22,6 +22,9 @@ type EagerReservoir interface {
 	Sample() []StepIndexed
 }
 
+// NewEagerReservoir creates an EagerReservoir with the given capacity. The
+// reservoir can hold up to capacity elements losslessly, and will start
+// downsampling after that many.
 func NewEagerReservoir(capacity uint64) EagerReservoir {
 	return &eagerReservoir{
 		rng: rand.New(rand.NewSource(0)),
