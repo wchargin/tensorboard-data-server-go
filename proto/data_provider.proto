@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package tensorboard.data;
+
+import "google/protobuf/timestamp.proto";
+import "tensorboard/compat/proto/summary.proto";
+
+option go_package = "github.com/wchargin/tensorboard-data-server/proto/data_provider_proto";
+
+service TensorBoardDataProvider {
+  rpc ListRuns(ListRunsRequest) returns (ListRunsResponse) {}
+  rpc ListScalars(ListScalarsRequest) returns (ListScalarsResponse) {}
+  rpc ReadScalars(ReadScalarsRequest) returns (ReadScalarsResponse) {}
+}
+
+message ListRunsRequest {
+  // ID of experiment in which to query data.
+  string experiment_id = 1;
+}
+
+message ListRunsResponse {
+  repeated Run runs = 1;
+}
+
+message Run {
+  // Unique opaque string identifier.
+  string id = 1;
+  // User-facing name.
+  string name = 2;
+  // Wall time of earliest recorded event.
+  google.protobuf.Timestamp start_time = 3;
+}
+
+message ListScalarsRequest {
+  // ID of experiment in which to query data.
+  string experiment_id = 1;
+  // Required filter for plugin name. If omitted, an empty message is implied.
+  PluginFilter plugin_name = 2;
+  // Optional filter for time series. If omitted, all time series match.
+  RunTagFilter run_tag_filter = 3;
+}
+
+message ListScalarsResponse {
+  repeated RunEntry runs = 1;
+  message RunEntry {
+    string run_name = 1;
+    repeated TagEntry tags = 2;
+  }
+  message TagEntry {
+    string tag_name = 1;
+    repeated ScalarTimeSeries time_series = 3;
+  }
+}
+
+message PluginFilter {
+  // Only match data by exactly this plugin name.
+  string plugin_name = 1;
+}
+
+message RunTagFilter {
+  // Optional filter for runs. If omitted, all runs match.
+  RunFilter runs = 1;
+  // Optional filter for tags. If omitted, all tags match.
+  TagFilter tags = 2;
+}
+
+message RunFilter {
+  // Only match runs with exactly one of these names. If this list is empty, no
+  // runs match.
+  repeated string runs = 1;
+}
+
+message TagFilter {
+  // Only match tags with exactly one of these names. If this list is empty, no
+  // tags match.
+  repeated string tags = 1;
+}
+
+message ScalarTimeSeries {
+  // Most recent step.
+  int64 max_step = 1;
+  // Wall time corresponding to the point with most recent step.
+  google.protobuf.Timestamp max_wall_time = 2;
+  // Proto wire encoding of `tensorboard.SummaryMetadata` for this time series.
+  tensorboard.SummaryMetadata summary_metadata = 3;
+}
+
+message ReadScalarsRequest {
+  // ID of experiment in which to query data.
+  string experiment_id = 1;
+  // Required filter for plugin name. If omitted, an empty message is implied.
+  PluginFilter plugin_name = 2;
+  // Optional filter for time series. If omitted, all time series match.
+  RunTagFilter run_tag_filter = 3;
+  // Required downsampling specification describing how many points to return
+  // per time series.
+  Downsample downsample = 4;
+}
+
+message Downsample {
+  // Maximum number of points to return. Should be non-negative. Zero means
+  // zero.
+  int64 num_points = 1;
+}
+
+message ReadScalarsResponse {
+  repeated RunEntry runs = 1;
+  message RunEntry {
+    string run_name = 1;
+    repeated TagEntry tags = 2;
+  }
+  message TagEntry {
+    string tag_name = 1;
+    repeated ScalarTimeSeries time_series = 3;
+  }
+}
+
+// A column-major sequence of scalar points. Arrays `step`, `wall_time`, and
+// `value` have the same lengths.
+message ScalarData {
+  repeated int64 step = 1;
+  repeated google.protobuf.Timestamp wall_time = 2;
+  repeated double value = 3;
+}

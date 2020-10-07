@@ -52,7 +52,10 @@ main() {
 bootstrap() (
     mkdir -p "${outdir}"
     cd "${outdir}"
-    for module in github.com/tensorflow/tensorflow; do
+    for module in \
+        github.com/tensorflow/tensorflow \
+        github.com/wchargin/tensorboard-data-server/proto \
+    ; do
         mkdir -p "${module}"
         if ! [ -f "${module}/go.mod" ]; then
             (cd "${module}" && go mod init "${module}")
@@ -62,13 +65,24 @@ bootstrap() (
 
 compile() {
     needs protoc protoc-gen-go
-    tensorboard_repo="$1"
+    case "$1" in
+        /*) tensorboard_repo="$1" ;;
+        *) tensorboard_repo="$PWD/$1" ;;
+    esac
     rm -rf "${outdir}"
     mkdir -p "${outdir}"
     (
         cd "${tensorboard_repo}"
         find tensorboard/compat/proto/ -name '*.proto' \
             -exec protoc --go_out="${outdir}" --go_opt=paths=import {} +
+    )
+    (
+        cd ./proto
+        find . -name '*.proto' -exec protoc \
+            -I"${tensorboard_repo}" -I. \
+            --go_out="${outdir}" --go-grpc_out="${outdir}" \
+            --go_opt=paths=import --go-grpc_opt=paths=import \
+            {} +
     )
     bootstrap
 }
