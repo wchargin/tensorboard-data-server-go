@@ -77,11 +77,11 @@ type readerState struct {
 	// Communication channels, described from the perspective of the
 	// loading goroutine (*Reader.start).
 
-	// reload is an input channel that sees "true" when this loader should
+	// reload is an input channel that sees unit when this loader should
 	// wake up.
 	reload chan struct{}
-	// asleep is an output channel that sees "true" when this loader has
-	// read to EOF and gone to sleep, to be awoken later via "reload".
+	// asleep is an output channel that sees unit when this loader has read
+	// to EOF and gone to sleep, to be awoken later via "reload".
 	asleep chan struct{}
 	// out is the output channel along which results will be sent.
 	out chan<- ValueResult
