@@ -11,7 +11,7 @@ jobs:
   # Separate "fmt" and "build" workflows so that lint failure don't block tests
   # from running. See also "continue-on-error" feature request:
   # https://github.community/t/continue-on-error-allow-failure-ui-indication/16773/11
-  fmt:
+  gofmt:
     runs-on: ubuntu-latest
     steps:
       - name: Set up Go environment
@@ -24,6 +24,19 @@ jobs:
 
       - name: Verify formatting
         run: go fmt ./... | diff -u /dev/null -
+
+  protofmt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Lint protos
+        uses: DoozyX/clang-format-lint-action@v0.5
+        with:
+          source: ./proto
+          extensions: 'proto'
+          clangFormatVersion: 9
 
   build:
     runs-on: ubuntu-latest
