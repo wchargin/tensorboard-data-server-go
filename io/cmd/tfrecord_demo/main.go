@@ -18,11 +18,11 @@ func main() {
 		panic(err)
 	}
 	for {
-		ProcessOneRecord(f)
+		processOneRecord(f)
 	}
 }
 
-func ProcessOneRecord(r io.Reader) {
+func processOneRecord(r io.Reader) {
 	var state *tbio.TFRecordState
 	fileDone := false
 	r = io.MultiReader(r, alertingReader{&fileDone})

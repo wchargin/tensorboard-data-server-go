@@ -74,7 +74,7 @@ func main() {
 	}
 }
 
-func ProcessOneRecord(r io.Reader) {
+func processOneRecord(r io.Reader) {
 	var state *tbio.TFRecordState
 	fileDone := false
 	r = io.MultiReader(r, alertingReader{&fileDone})

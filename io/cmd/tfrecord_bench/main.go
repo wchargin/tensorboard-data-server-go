@@ -47,7 +47,7 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	ReadAllRecords(args[0])
+	readAllRecords(args[0])
 
 	if *memprofile != "" {
 		fmt.Println("creating memory profile...")
@@ -67,7 +67,7 @@ func main() {
 	fmt.Printf("ballast len: %v\n", len(ballastBuf))
 }
 
-func ReadAllRecords(fileName string) {
+func readAllRecords(fileName string) {
 	rawFile, err := os.Open(fileName)
 	if err != nil {
 		panic(err)
@@ -76,7 +76,7 @@ func ReadAllRecords(fileName string) {
 	recordsRead := 0
 	totalPayloadSize := 0
 	for {
-		payloadSize, more := ProcessOneRecord(f)
+		payloadSize, more := processOneRecord(f)
 		recordsRead++
 		totalPayloadSize += payloadSize
 		if !more {
@@ -86,7 +86,7 @@ func ReadAllRecords(fileName string) {
 	fmt.Printf("all done; read %v records (%v bytes payload)\n", recordsRead, totalPayloadSize)
 }
 
-func ProcessOneRecord(r io.Reader) (payloadSize int, more bool) {
+func processOneRecord(r io.Reader) (payloadSize int, more bool) {
 	var state *tbio.TFRecordState
 	rec, err := tbio.ReadRecord(&state, r)
 	if err == io.EOF {

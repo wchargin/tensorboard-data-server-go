@@ -14,7 +14,7 @@ func main() {
 		if step > 30 {
 			step -= 10
 		}
-		rsv.Offer(&Event{event_go_proto.Event{Step: step, WallTime: 0.0}})
+		rsv.Offer(&event{event_go_proto.Event{Step: step, WallTime: 0.0}})
 		for _, v := range rsv.Sample() {
 			fmt.Printf("{%v} ", v)
 		}
@@ -22,10 +22,11 @@ func main() {
 	}
 }
 
-type Event struct {
+type event struct {
 	event_go_proto.Event
 }
 
-func (e *Event) Step() mem.Step {
+// Step implements mem.StepIndexed.
+func (e *event) Step() mem.Step {
 	return mem.Step(e.Event.Step)
 }
