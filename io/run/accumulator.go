@@ -137,6 +137,25 @@ func (acc *Accumulator) Sample(tag string) []ValueDatum {
 	return result
 }
 
+// Last returns the last value stored for the given time series, or nil if no
+// data has been seen.
+func (acc *Accumulator) Last(tag string) *ValueDatum {
+	acc.mu.Lock()
+	rsv, ok := acc.data[tag]
+	if !ok {
+		acc.mu.Unlock()
+		return nil
+	}
+	acc.mu.Unlock()
+	last := rsv.Last()
+	if last == nil {
+		// shouldn't happen, but don't panic
+		return nil
+	}
+	lastDatum := last.(ValueDatum)
+	return &lastDatum
+}
+
 func reservoirCapacity(dc spb.DataClass) uint64 {
 	switch dc {
 	case spb.DataClass_DATA_CLASS_SCALAR:

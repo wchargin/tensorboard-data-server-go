@@ -39,7 +39,10 @@ func TestSimple(t *testing.T) {
 	rsv := NewEagerReservoir(10)
 
 	if sample := rsv.Sample(); len(sample) != 0 {
-		t.Errorf("empty reservoir: got %v, want empty array", sample)
+		t.Errorf("empty reservoir: Sample(): got %v, want empty array", sample)
+	}
+	if last := rsv.Last(); last != nil {
+		t.Errorf("empty reservoir: Last(): got %v, want nil", last)
 	}
 
 	// Fill with `[i * i for i in range(10)]`, exactly filling the reservoir.
@@ -52,6 +55,9 @@ func TestSimple(t *testing.T) {
 		if s := extractSteps(rsv); !stepsEqual(s, expectedSteps) {
 			t.Errorf("i=%v: got %v, want %v", i, s, expectedSteps)
 		}
+		if got, want := rsv.Last(), Step(i*i); got == nil || got.Step() != want {
+			t.Errorf("i=%v: got last=%v, want step %v", i, got, want)
+		}
 	}
 
 	// Fill with more square numbers, keeping last but not overflowing.
@@ -63,6 +69,9 @@ func TestSimple(t *testing.T) {
 		} else if steps[len(steps)-1] != Step(i*i) {
 			t.Errorf("i=%v: got %v, wanted [..., %v]", i, steps, Step(i*i))
 		}
+		if got, want := rsv.Last(), Step(i*i); got == nil || got.Step() != want {
+			t.Errorf("i=%v: got last=%v, want step %v", i, got, want)
+		}
 	}
 
 	// Seen 16 records, keeping 10. Preempt to invalidate records 9..=16,
@@ -73,6 +82,12 @@ func TestSimple(t *testing.T) {
 		steps := extractSteps(rsv)
 		if len(steps) < 2 || len(steps) > 8+1 {
 			t.Errorf("after preemption: got %v, wanted 2<=len<=9", steps)
+		}
+		{
+			sample := rsv.Sample()
+			if got, want := rsv.Last(), sample[len(sample)-1]; got != want {
+				t.Errorf("after preemption: got %v, want match %v", got, want)
+			}
 		}
 
 		increasing := true
@@ -104,7 +119,10 @@ func TestSimple(t *testing.T) {
 	// or may not be evicted, but this new record should be the last.
 	rsv.Offer(JustStep{step: 71})
 	if steps := extractSteps(rsv); steps[len(steps)-1] != 71 {
-		t.Errorf("after final record: got %v, wanted last = 71", steps)
+		t.Errorf("after final record: got Sample() %v, wanted last = 71", steps)
+	}
+	if last := rsv.Last(); last.Step() != 71 {
+		t.Errorf("after final record: got Last() %v, wanted last = 71", last)
 	}
 }
 

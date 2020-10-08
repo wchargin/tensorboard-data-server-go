@@ -59,12 +59,11 @@ func (s *Server) ListScalars(ctx context.Context, req *dppb.ListScalarsRequest) 
 			if !matchesFilter(tagFilter, tag) {
 				continue
 			}
-			sample := acc.Sample(tag)
-			if len(sample) == 0 {
+			last := acc.Last(tag)
+			if last == nil {
 				// shouldn't happen, but don't panic
 				continue
 			}
-			last := sample[len(sample)-1]
 			e := &dppb.ListScalarsResponse_TagEntry{
 				TagName: tag,
 				TimeSeries: &dppb.ScalarTimeSeries{

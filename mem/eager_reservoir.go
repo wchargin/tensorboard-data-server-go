@@ -20,6 +20,9 @@ type EagerReservoir interface {
 	// include the most recent record. The returned buffer is owned by the
 	// caller.
 	Sample() []StepIndexed
+	// Last returns the most recent record, or nil if no records have yet
+	// been offered.
+	Last() StepIndexed
 }
 
 // NewEagerReservoir creates an EagerReservoir with the given capacity. The
@@ -100,4 +103,14 @@ func (rsv *eagerReservoir) Sample() []StepIndexed {
 	result := make([]StepIndexed, rsv.stored)
 	copy(result, rsv.buf)
 	return result
+}
+
+func (rsv *eagerReservoir) Last() StepIndexed {
+	rsv.mutex.Lock()
+	defer rsv.mutex.Unlock()
+
+	if rsv.stored == 0 {
+		return nil
+	}
+	return rsv.buf[rsv.stored-1]
 }
