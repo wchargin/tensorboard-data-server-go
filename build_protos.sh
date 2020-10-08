@@ -64,7 +64,7 @@ bootstrap() (
 )
 
 compile() {
-    needs protoc protoc-gen-go
+    needs protoc protoc-gen-go protoc-gen-go-grpc
     case "$1" in
         /*) tensorboard_repo="$1" ;;
         *) tensorboard_repo="$PWD/$1" ;;

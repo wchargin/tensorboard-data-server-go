@@ -10,6 +10,7 @@ Clone [TensorBoard][tensorboard]. Run:
 ```
 ./build_protos.sh --bootstrap
 go get github.com/golang/protobuf/protoc-gen-go
+go get google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.0
 ./build_protos.sh PATH_TO_TENSORBOARD_REPO
 ```
 
