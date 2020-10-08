@@ -35,7 +35,7 @@ message ListScalarsRequest {
   // ID of experiment in which to query data.
   string experiment_id = 1;
   // Required filter for plugin name. If omitted, an empty message is implied.
-  PluginFilter plugin_name = 2;
+  PluginFilter plugin_filter = 2;
   // Optional filter for time series. If omitted, all time series match.
   RunTagFilter run_tag_filter = 3;
 }
@@ -48,7 +48,7 @@ message ListScalarsResponse {
   }
   message TagEntry {
     string tag_name = 1;
-    repeated ScalarTimeSeries time_series = 3;
+    ScalarTimeSeries time_series = 2;
   }
 }
 
@@ -89,7 +89,7 @@ message ReadScalarsRequest {
   // ID of experiment in which to query data.
   string experiment_id = 1;
   // Required filter for plugin name. If omitted, an empty message is implied.
-  PluginFilter plugin_name = 2;
+  PluginFilter plugin_filter = 2;
   // Optional filter for time series. If omitted, all time series match.
   RunTagFilter run_tag_filter = 3;
   // Required downsampling specification describing how many points to return
@@ -111,14 +111,14 @@ message ReadScalarsResponse {
   }
   message TagEntry {
     string tag_name = 1;
-    repeated ScalarTimeSeries time_series = 3;
+    ScalarData data = 2;
   }
 }
 
 // A column-major sequence of scalar points. Arrays `step`, `wall_time`, and
 // `value` have the same lengths.
 message ScalarData {
-  repeated int64 step = 1;
+  repeated int64 step = 1 [packed = true];
   repeated google.protobuf.Timestamp wall_time = 2;
-  repeated double value = 3;
+  repeated double value = 3 [packed = true];
 }
