@@ -10,6 +10,7 @@ import (
 	"github.com/wchargin/tensorboard-data-server/io/run"
 )
 
+// LoaderBuilder specifies options for a Loader.
 type LoaderBuilder struct {
 	// FS is the filesystem to use for read operations.
 	FS fs.Filesystem
@@ -17,6 +18,8 @@ type LoaderBuilder struct {
 	Logdir string
 }
 
+// Start starts a loader in a new goroutine. It starts dormant. Call Reload on
+// returned *Loader to poll.
 func (b LoaderBuilder) Start() *Loader {
 	ll := &Loader{
 		fs:     b.FS,
@@ -32,6 +35,7 @@ func (b LoaderBuilder) Start() *Loader {
 	return ll
 }
 
+// Loader loads all runs under a log directory and accumulates their contents.
 type Loader struct {
 	// fs is the filesystem to use for read operations.
 	fs fs.Filesystem
