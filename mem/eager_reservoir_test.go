@@ -35,7 +35,7 @@ func stepsEqual(s1, s2 []Step) bool {
 
 }
 
-func TestSimple(t *testing.T) {
+func TestReservoirSimple(t *testing.T) {
 	rsv := NewEagerReservoir(10)
 
 	if sample := rsv.Sample(); len(sample) != 0 {
@@ -126,7 +126,7 @@ func TestSimple(t *testing.T) {
 	}
 }
 
-func TestDeterministic(t *testing.T) {
+func TestReservoirDeterministic(t *testing.T) {
 	r1 := NewEagerReservoir(10)
 	r2 := NewEagerReservoir(10)
 
