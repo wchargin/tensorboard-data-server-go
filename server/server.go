@@ -5,9 +5,6 @@ import (
 	"encoding/binary"
 	"log"
 	"math"
-	"time"
-
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	spb "github.com/tensorflow/tensorflow/tensorflow/go/core/framework/summary_go_proto"
 	tpb "github.com/tensorflow/tensorflow/tensorflow/go/core/framework/tensor_go_proto"
@@ -71,7 +68,7 @@ func (s *Server) ListScalars(ctx context.Context, req *dppb.ListScalarsRequest) 
 				TagName: tag,
 				TimeSeries: &dppb.ScalarTimeSeries{
 					MaxStep:         int64(last.EventStep),
-					MaxWallTime:     timestamp(last.EventWallTime),
+					MaxWallTime:     last.EventWallTime,
 					SummaryMetadata: md,
 				},
 			}
@@ -111,13 +108,13 @@ func (s *Server) ReadScalars(ctx context.Context, req *dppb.ReadScalarsRequest) 
 			sample := acc.Sample(tag)
 			data := dppb.ScalarData{
 				Step:     make([]int64, len(sample)),
-				WallTime: make([]*timestamppb.Timestamp, len(sample)),
+				WallTime: make([]float64, len(sample)),
 				Value:    make([]float64, len(sample)),
 			}
 			// TODO(@wchargin): Re-downsample.
 			for i, x := range sample {
 				data.Step[i] = int64(x.EventStep)
-				data.WallTime[i] = timestamp(x.EventWallTime)
+				data.WallTime[i] = x.EventWallTime
 				data.Value[i] = scalarValue(x.Value.GetTensor())
 			}
 			e := &dppb.ReadScalarsResponse_TagEntry{
@@ -163,13 +160,6 @@ func filters(rtf *dppb.RunTagFilter) (runs stringFilter, tags stringFilter) {
 		tags = &tf.Tags
 	}
 	return
-}
-
-// timestamp converts event file wall_times to google.protobuf.Timestamp.
-func timestamp(wallTime float64) *timestamppb.Timestamp {
-	s, ns := math.Modf(wallTime) // OK if ns < 0
-	t := time.Unix(int64(s), int64(ns*1e9))
-	return timestamppb.New(t)
 }
 
 // scalarValue gets the scalar data point associated with the given tensor,

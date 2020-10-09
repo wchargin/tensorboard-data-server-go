@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package tensorboard.data;
 
-import "google/protobuf/timestamp.proto";
 import "tensorboard/compat/proto/summary.proto";
 
 option go_package = "github.com/wchargin/tensorboard-data-server/proto/data_provider_proto";
@@ -27,8 +26,9 @@ message Run {
   string id = 1;
   // User-facing name.
   string name = 2;
-  // Wall time of earliest recorded event.
-  google.protobuf.Timestamp start_time = 3;
+  // Wall time of earliest recorded event, as floating-point seconds since
+  // epoch (same as event file format).
+  double start_time = 3;
 }
 
 message ListScalarsRequest {
@@ -80,7 +80,7 @@ message ScalarTimeSeries {
   // Most recent step.
   int64 max_step = 1;
   // Wall time corresponding to the point with most recent step.
-  google.protobuf.Timestamp max_wall_time = 2;
+  double max_wall_time = 2;
   // Proto wire encoding of `tensorboard.SummaryMetadata` for this time series.
   tensorboard.SummaryMetadata summary_metadata = 3;
 }
@@ -119,6 +119,6 @@ message ReadScalarsResponse {
 // `value` have the same lengths.
 message ScalarData {
   repeated int64 step = 1 [packed = true];
-  repeated google.protobuf.Timestamp wall_time = 2;
+  repeated double wall_time = 2 [packed = true];
   repeated double value = 3 [packed = true];
 }
