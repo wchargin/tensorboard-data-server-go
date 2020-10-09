@@ -154,3 +154,47 @@ func TestEventValuesTFv2Scalars(t *testing.T) {
 		}
 	}
 }
+
+func TestEventValuesGraphDef(t *testing.T) {
+	mds := make(MetadataStore)
+	event := &epb.Event{
+		Step:     0,
+		WallTime: 1000.25,
+		What:     &epb.Event_GraphDef{GraphDef: []byte("my graph")},
+	}
+	values := EventValues(event, mds)
+
+	if got, want := len(values), 1; got != want {
+		t.Errorf("len(values): got %v, want %v: %v", got, want, values)
+		if got < want {
+			t.FailNow()
+		}
+	}
+
+	// Check metadata.
+	{
+		got := values[0].Metadata
+		want := &spb.SummaryMetadata{
+			DataClass: spb.DataClass_DATA_CLASS_BLOB_SEQUENCE,
+			PluginData: &spb.SummaryMetadata_PluginData{
+				PluginName: graphsPluginName,
+			},
+		}
+		if !proto.Equal(got, want) {
+			t.Errorf("values[0].Metadata: got %v, want %v", got, want)
+		}
+	}
+
+	// Check values.
+	{
+		got := values[0].GetTensor()
+		want := &tpb.TensorProto{
+			Dtype:       dtpb.DataType_DT_STRING,
+			TensorShape: &tspb.TensorShapeProto{Dim: []*tspb.TensorShapeProto_Dim{{Size: 1}}},
+			StringVal:   [][]byte{[]byte("my graph")},
+		}
+		if !proto.Equal(got, want) {
+			t.Errorf("values[0].Tensor: got %v, want %v", got, want)
+		}
+	}
+}

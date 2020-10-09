@@ -40,7 +40,7 @@ func EventValues(e *epb.Event, mds MetadataStore) []*spb.Summary_Value {
 func migrateGraphDef(gd *epb.Event_GraphDef, mds MetadataStore) []*spb.Summary_Value {
 	tensor := &tpb.TensorProto{
 		Dtype:       dtpb.DataType_DT_STRING,
-		TensorShape: &tspb.TensorShapeProto{}, // empty dim list (scalar)
+		TensorShape: &tspb.TensorShapeProto{Dim: []*tspb.TensorShapeProto_Dim{{Size: 1}}},
 		StringVal:   [][]byte{gd.GraphDef},
 	}
 	v := &spb.Summary_Value{
