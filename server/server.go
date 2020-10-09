@@ -2,12 +2,15 @@ package server
 
 import (
 	"context"
+	"encoding/binary"
+	"log"
 	"math"
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	spb "github.com/tensorflow/tensorflow/tensorflow/go/core/framework/summary_go_proto"
+	tpb "github.com/tensorflow/tensorflow/tensorflow/go/core/framework/tensor_go_proto"
 	dtpb "github.com/tensorflow/tensorflow/tensorflow/go/core/framework/types_go_proto"
 	"github.com/wchargin/tensorboard-data-server/io/logdir"
 	dppb "github.com/wchargin/tensorboard-data-server/proto/data_provider_proto"
@@ -115,13 +118,7 @@ func (s *Server) ReadScalars(ctx context.Context, req *dppb.ReadScalarsRequest) 
 			for i, x := range sample {
 				data.Step[i] = int64(x.EventStep)
 				data.WallTime[i] = timestamp(x.EventWallTime)
-				tensor := x.Value.GetTensor()
-				switch tensor.Dtype {
-				case dtpb.DataType_DT_FLOAT:
-					data.Value[i] = float64(tensor.FloatVal[0])
-				case dtpb.DataType_DT_DOUBLE:
-					data.Value[i] = tensor.DoubleVal[0]
-				}
+				data.Value[i] = scalarValue(x.Value.GetTensor())
 			}
 			e := &dppb.ReadScalarsResponse_TagEntry{
 				TagName: tag,
@@ -173,4 +170,24 @@ func timestamp(wallTime float64) *timestamppb.Timestamp {
 	s, ns := math.Modf(wallTime) // OK if ns < 0
 	t := time.Unix(int64(s), int64(ns*1e9))
 	return timestamppb.New(t)
+}
+
+// scalarValue gets the scalar data point associated with the given tensor,
+// whose summary's time series should be DATA_CLASS_SCALAR.
+func scalarValue(tensor *tpb.TensorProto) float64 {
+	switch tensor.Dtype {
+	case dtpb.DataType_DT_FLOAT:
+		if len(tensor.FloatVal) > 0 {
+			return float64(tensor.FloatVal[0])
+		}
+		return float64(math.Float32frombits(binary.LittleEndian.Uint32(tensor.TensorContent)))
+	case dtpb.DataType_DT_DOUBLE:
+		if len(tensor.DoubleVal) > 0 {
+			return tensor.DoubleVal[0]
+		}
+		return math.Float64frombits(binary.LittleEndian.Uint64(tensor.TensorContent))
+	default:
+		log.Printf("bad scalar dtype %v", tensor.Dtype)
+		return math.NaN()
+	}
 }

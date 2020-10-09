@@ -62,18 +62,17 @@ func migrateGraphDef(gd *epb.Event_GraphDef, mds MetadataStore) []*spb.Summary_V
 func migrateSummary(s *epb.Event_Summary, mds MetadataStore) []*spb.Summary_Value {
 	var result []*spb.Summary_Value
 	for _, v := range s.Summary.Value {
-		migrateValueInPlace(v)
 		meta, hadMeta := mds[v.Tag]
+		migrateValueInPlace(v, meta)
 		if !hadMeta {
-			meta = v.Metadata
-			mds[v.Tag] = meta
+			mds[v.Tag] = v.Metadata
 		}
 		result = append(result, v)
 	}
 	return result
 }
 
-func migrateValueInPlace(v *spb.Summary_Value) {
+func migrateValueInPlace(v *spb.Summary_Value, initialMeta *spb.SummaryMetadata) {
 	switch what := v.Value.(type) {
 	case *spb.Summary_Value_SimpleValue:
 		tensor := &tpb.TensorProto{
@@ -82,13 +81,32 @@ func migrateValueInPlace(v *spb.Summary_Value) {
 			FloatVal:    []float32{what.SimpleValue},
 		}
 		v.Value = &spb.Summary_Value_Tensor{Tensor: tensor}
-		v.Metadata = &spb.SummaryMetadata{
-			PluginData: &spb.SummaryMetadata_PluginData{
-				PluginName: scalarsPluginName,
-			},
-			DataClass: spb.DataClass_DATA_CLASS_SCALAR,
+		if initialMeta == nil {
+			v.Metadata = &spb.SummaryMetadata{
+				PluginData: &spb.SummaryMetadata_PluginData{
+					PluginName: scalarsPluginName,
+				},
+				DataClass: spb.DataClass_DATA_CLASS_SCALAR,
+			}
 		}
+	case *spb.Summary_Value_Tensor:
+		migrateTensorInPlace(v, what.Tensor, initialMeta)
 	default:
 		// Ignore other values for now.
+	}
+}
+
+func migrateTensorInPlace(v *spb.Summary_Value, tensor *tpb.TensorProto, initialMeta *spb.SummaryMetadata) {
+	var pluginName string
+	if initialMeta == nil {
+		pluginName = v.Metadata.GetPluginData().GetPluginName()
+		switch pluginName {
+		case scalarsPluginName:
+			v.Metadata.DataClass = spb.DataClass_DATA_CLASS_SCALAR
+		}
+	}
+	switch pluginName {
+	case scalarsPluginName:
+		// no transformations needed
 	}
 }
