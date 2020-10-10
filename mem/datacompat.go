@@ -1,6 +1,8 @@
 package mem
 
 import (
+	"fmt"
+
 	spb "github.com/tensorflow/tensorflow/tensorflow/go/core/framework/summary_go_proto"
 	tpb "github.com/tensorflow/tensorflow/tensorflow/go/core/framework/tensor_go_proto"
 	tspb "github.com/tensorflow/tensorflow/tensorflow/go/core/framework/tensor_shape_go_proto"
@@ -20,6 +22,7 @@ const runGraphName string = "__run_graph__"
 // `tensorboard.plugin.*.metadata`.
 const (
 	graphsPluginName  = "graphs"
+	imagesPluginName  = "images"
 	scalarsPluginName = "scalars"
 )
 
@@ -89,6 +92,27 @@ func migrateValueInPlace(v *spb.Summary_Value, initialMeta *spb.SummaryMetadata)
 				DataClass: spb.DataClass_DATA_CLASS_SCALAR,
 			}
 		}
+	case *spb.Summary_Value_Image:
+		im := what.Image
+		bufs := [][]byte{
+			[]byte(fmt.Sprintf("%d", im.Width)),
+			[]byte(fmt.Sprintf("%d", im.Height)),
+			im.EncodedImageString,
+		}
+		tensor := &tpb.TensorProto{
+			Dtype:       dtpb.DataType_DT_STRING,
+			TensorShape: &tspb.TensorShapeProto{Dim: []*tspb.TensorShapeProto_Dim{{Size: 3}}},
+			StringVal:   bufs,
+		}
+		v.Value = &spb.Summary_Value_Tensor{Tensor: tensor}
+		if initialMeta == nil {
+			v.Metadata = &spb.SummaryMetadata{
+				PluginData: &spb.SummaryMetadata_PluginData{
+					PluginName: imagesPluginName,
+				},
+				DataClass: spb.DataClass_DATA_CLASS_BLOB_SEQUENCE,
+			}
+		}
 	case *spb.Summary_Value_Tensor:
 		migrateTensorInPlace(v, what.Tensor, initialMeta)
 	default:
@@ -103,10 +127,14 @@ func migrateTensorInPlace(v *spb.Summary_Value, tensor *tpb.TensorProto, initial
 		switch pluginName {
 		case scalarsPluginName:
 			v.Metadata.DataClass = spb.DataClass_DATA_CLASS_SCALAR
+		case imagesPluginName:
+			v.Metadata.DataClass = spb.DataClass_DATA_CLASS_BLOB_SEQUENCE
 		}
 	}
 	switch pluginName {
 	case scalarsPluginName:
+		// no transformations needed
+	case imagesPluginName:
 		// no transformations needed
 	}
 }

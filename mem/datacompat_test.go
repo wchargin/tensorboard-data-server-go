@@ -155,6 +155,84 @@ func TestEventValuesTFv2Scalars(t *testing.T) {
 	}
 }
 
+func TestEventValuesTFv1Images(t *testing.T) {
+	imageSummary := func(w int32, h int32, buf string) *epb.Event_Summary {
+		im := &spb.Summary_Image{
+			Height:             h,
+			Width:              h,
+			Colorspace:         1,
+			EncodedImageString: []byte(buf),
+		}
+		return &epb.Event_Summary{Summary: &spb.Summary{
+			Value: []*spb.Summary_Value{
+				{Tag: "input/image/0", Value: &spb.Summary_Value_Image{Image: im}},
+			},
+		}}
+	}
+
+	mds := make(MetadataStore)
+	events := []*epb.Event{
+		{Step: 0, WallTime: 1000.25, What: imageSummary(28, 28, "mnist ONE")},
+		{Step: 1, WallTime: 1234.50, What: imageSummary(280, 280, "mnist TEN")},
+	}
+	var values []*spb.Summary_Value
+	for _, e := range events {
+		values = append(values, EventValues(e, mds)...)
+	}
+
+	wantBufses := [][]string{{"28", "28", "mnist ONE"}, {"280", "280", "mnist TEN"}}
+	if got, want := len(values), len(wantBufses); got != want {
+		t.Errorf("len(values): got %v, want %v: %v", got, want, values)
+		if got < want {
+			t.FailNow()
+		}
+	}
+
+	// Check metadata.
+	{
+		got := values[0].Metadata
+		want := &spb.SummaryMetadata{
+			DataClass: spb.DataClass_DATA_CLASS_BLOB_SEQUENCE,
+			PluginData: &spb.SummaryMetadata_PluginData{
+				PluginName: imagesPluginName,
+			},
+		}
+		if !proto.Equal(got, want) {
+			t.Errorf("values[0].Metadata: got %v, want %v", got, want)
+		}
+		tag := "input/image/0"
+		got = mds[tag]
+		if !proto.Equal(got, want) {
+			t.Errorf("mds[%q]: got %v, want %v", tag, got, want)
+		}
+	}
+	if got := values[1].Metadata; got != nil {
+		t.Errorf("values[1].Metadata: got %v, want nil", got)
+	}
+
+	// Check values.
+	for i, v := range values {
+		tensor := v.GetTensor()
+		if tensor == nil {
+			t.Errorf("values[%v]: got %v, want Tensor", i, v)
+		}
+		wantBufs := make([][]byte, len(wantBufses[i]))
+		for j, buf := range wantBufses[i] {
+			wantBufs[j] = []byte(buf)
+		}
+		wantTensor := &tpb.TensorProto{
+			Dtype: dtpb.DataType_DT_STRING,
+			TensorShape: &tspb.TensorShapeProto{
+				Dim: []*tspb.TensorShapeProto_Dim{{Size: int64(len(wantBufs))}},
+			},
+			StringVal: wantBufs,
+		}
+		if !proto.Equal(tensor, wantTensor) {
+			t.Errorf("values[%v].Tensor: got %v, want %v", i, tensor, wantTensor)
+		}
+	}
+}
+
 func TestEventValuesGraphDef(t *testing.T) {
 	mds := make(MetadataStore)
 	event := &epb.Event{
