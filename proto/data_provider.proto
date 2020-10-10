@@ -10,6 +10,11 @@ service TensorBoardDataProvider {
   rpc ListRuns(ListRunsRequest) returns (ListRunsResponse) {}
   rpc ListScalars(ListScalarsRequest) returns (ListScalarsResponse) {}
   rpc ReadScalars(ReadScalarsRequest) returns (ReadScalarsResponse) {}
+  rpc ListBlobSequences(ListBlobSequencesRequest)
+      returns (ListBlobSequencesResponse) {}
+  rpc ReadBlobSequences(ReadBlobSequencesRequest)
+      returns (ReadBlobSequencesResponse) {}
+  rpc ReadBlob(ReadBlobRequest) returns (stream ReadBlobResponse) {}
 }
 
 message ListRunsRequest {
@@ -121,4 +126,93 @@ message ScalarData {
   repeated int64 step = 1 [packed = true];
   repeated double wall_time = 2 [packed = true];
   repeated double value = 3 [packed = true];
+}
+
+message ListBlobSequencesRequest {
+  // ID of experiment in which to query data.
+  string experiment_id = 1;
+  // Required filter for plugin name. If omitted, an empty message is implied.
+  PluginFilter plugin_filter = 2;
+  // Optional filter for time series. If omitted, all time series match.
+  RunTagFilter run_tag_filter = 3;
+}
+
+message ListBlobSequencesResponse {
+  repeated RunEntry runs = 1;
+  message RunEntry {
+    string run_name = 1;
+    repeated TagEntry tags = 2;
+  }
+  message TagEntry {
+    string tag_name = 1;
+    BlobSequenceTimeSeries time_series = 2;
+  }
+}
+
+message BlobSequenceTimeSeries {
+  // Largest step value of any datum in this time series. Non-negative.
+  int64 max_step = 1;
+  // Largest wall time of any datum in this time series.
+  double max_wall_time = 2;
+  // Largest number of blobs in any datum in this time series.
+  int64 max_length = 3;
+  // Proto wire encoding of `tensorboard.SummaryMetadata` for this time series.
+  tensorboard.SummaryMetadata summary_metadata = 4;
+}
+
+message ReadBlobSequencesRequest {
+  // ID of experiment in which to query data.
+  string experiment_id = 1;
+  // Required filter for plugin name. If omitted, an empty message is implied.
+  PluginFilter plugin_filter = 2;
+  // Optional filter for time series. If omitted, all time series match.
+  RunTagFilter run_tag_filter = 3;
+  // Required downsampling specification describing how many points to return
+  // per time series.
+  Downsample downsample = 4;
+}
+
+message ReadBlobSequencesResponse {
+  repeated RunEntry runs = 1;
+  message RunEntry {
+    string run_name = 1;
+    repeated TagEntry tags = 2;
+  }
+  message TagEntry {
+    string tag_name = 1;
+    BlobSequenceData data = 2;
+  }
+}
+
+// A column-major sequence of blob sequence points. Arrays `step`, `wall_time`,
+// and `value` have the same lengths.
+message BlobSequenceData {
+  repeated int64 step = 1 [packed = true];
+  repeated double wall_time = 2 [packed = true];
+  repeated BlobReferenceSequence values = 3;
+}
+
+message BlobReferenceSequence {
+  repeated BlobReference blob_refs = 1;
+}
+
+// A reference to a blob.
+message BlobReference {
+  // Unique identifier for a blob, which may be dereferenced via the `ReadBlob`
+  // RPC. Must be included directly in a URL with no further encoding.
+  // Case-sensitive. Required; the empty string is not a valid key.
+  string blob_key = 1;
+  // Optional URL from which the blob may be fetched directly, bypassing the
+  // data provider interface.
+  string url = 2;
+}
+
+message ReadBlobRequest {
+  string blob_key = 1;
+}
+
+message ReadBlobResponse {
+  // The bytes in this chunk. Should be concatenated with any other responses
+  // in the stream to recover the full blob contents.
+  bytes data = 1;
 }
