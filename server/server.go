@@ -10,6 +10,7 @@ import (
 	tpb "github.com/tensorflow/tensorflow/tensorflow/go/core/framework/tensor_go_proto"
 	dtpb "github.com/tensorflow/tensorflow/tensorflow/go/core/framework/types_go_proto"
 	"github.com/wchargin/tensorboard-data-server/io/logdir"
+	"github.com/wchargin/tensorboard-data-server/io/run"
 	dppb "github.com/wchargin/tensorboard-data-server/proto/data_provider_proto"
 )
 
@@ -59,16 +60,17 @@ func (s *Server) ListScalars(ctx context.Context, req *dppb.ListScalarsRequest) 
 			if !matchesFilter(tagFilter, tag) {
 				continue
 			}
-			last := acc.Last(tag)
-			if last == nil {
+			sample := acc.Sample(tag)
+			if len(sample) == 0 {
 				// shouldn't happen, but don't panic
 				continue
 			}
+			last := sample[len(sample)-1]
 			e := &dppb.ListScalarsResponse_TagEntry{
 				TagName: tag,
 				TimeSeries: &dppb.ScalarTimeSeries{
 					MaxStep:         int64(last.EventStep),
-					MaxWallTime:     last.EventWallTime,
+					MaxWallTime:     maxWallTime(sample),
 					SummaryMetadata: md,
 				},
 			}
@@ -180,4 +182,15 @@ func scalarValue(tensor *tpb.TensorProto) float64 {
 		log.Printf("bad scalar dtype %v", tensor.Dtype)
 		return math.NaN()
 	}
+}
+
+func maxWallTime(ds []run.ValueDatum) float64 {
+	result := math.Inf(-1)
+	for _, d := range ds {
+		wt := d.EventWallTime
+		if wt > result {
+			result = wt
+		}
+	}
+	return result
 }

@@ -77,9 +77,9 @@ message TagFilter {
 }
 
 message ScalarTimeSeries {
-  // Most recent step.
+  // Largest step value of any datum in this time series. Non-negative.
   int64 max_step = 1;
-  // Wall time corresponding to the point with most recent step.
+  // Largest wall time of any datum in this time series.
   double max_wall_time = 2;
   // Proto wire encoding of `tensorboard.SummaryMetadata` for this time series.
   tensorboard.SummaryMetadata summary_metadata = 3;
