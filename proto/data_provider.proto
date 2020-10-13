@@ -3,6 +3,7 @@ syntax = "proto3";
 package tensorboard.data;
 
 import "tensorboard/compat/proto/summary.proto";
+import "tensorboard/compat/proto/tensor.proto";
 
 option go_package = "github.com/wchargin/tensorboard-data-server/proto/data_provider_proto";
 
@@ -10,6 +11,8 @@ service TensorBoardDataProvider {
   rpc ListRuns(ListRunsRequest) returns (ListRunsResponse) {}
   rpc ListScalars(ListScalarsRequest) returns (ListScalarsResponse) {}
   rpc ReadScalars(ReadScalarsRequest) returns (ReadScalarsResponse) {}
+  rpc ListTensors(ListTensorsRequest) returns (ListTensorsResponse) {}
+  rpc ReadTensors(ReadTensorsRequest) returns (ReadTensorsResponse) {}
   rpc ListBlobSequences(ListBlobSequencesRequest)
       returns (ListBlobSequencesResponse) {}
   rpc ReadBlobSequences(ReadBlobSequencesRequest)
@@ -126,6 +129,68 @@ message ScalarData {
   repeated int64 step = 1 [packed = true];
   repeated double wall_time = 2 [packed = true];
   repeated double value = 3 [packed = true];
+}
+
+message ListTensorsRequest {
+  // ID of experiment in which to query data.
+  string experiment_id = 1;
+  // Required filter for plugin name. If omitted, an empty message is implied.
+  PluginFilter plugin_filter = 2;
+  // Optional filter for time series. If omitted, all time series match.
+  RunTagFilter run_tag_filter = 3;
+}
+
+message ListTensorsResponse {
+  repeated RunEntry runs = 1;
+  message RunEntry {
+    string run_name = 1;
+    repeated TagEntry tags = 2;
+  }
+  message TagEntry {
+    string tag_name = 1;
+    TensorTimeSeries time_series = 2;
+  }
+}
+
+message TensorTimeSeries {
+  // Largest step value of any datum in this time series. Non-negative.
+  int64 max_step = 1;
+  // Largest wall time of any datum in this time series.
+  double max_wall_time = 2;
+  // Proto wire encoding of `tensorboard.SummaryMetadata` for this time series.
+  tensorboard.SummaryMetadata summary_metadata = 3;
+}
+
+message ReadTensorsRequest {
+  // ID of experiment in which to query data.
+  string experiment_id = 1;
+  // Required filter for plugin name. If omitted, an empty message is implied.
+  PluginFilter plugin_filter = 2;
+  // Optional filter for time series. If omitted, all time series match.
+  RunTagFilter run_tag_filter = 3;
+  // Required downsampling specification describing how many points to return
+  // per time series.
+  Downsample downsample = 4;
+}
+
+message ReadTensorsResponse {
+  repeated RunEntry runs = 1;
+  message RunEntry {
+    string run_name = 1;
+    repeated TagEntry tags = 2;
+  }
+  message TagEntry {
+    string tag_name = 1;
+    TensorData data = 2;
+  }
+}
+
+// A column-major sequence of tensor points. Arrays `step`, `wall_time`, and
+// `value` have the same lengths.
+message TensorData {
+  repeated int64 step = 1 [packed = true];
+  repeated double wall_time = 2 [packed = true];
+  repeated tensorboard.TensorProto value = 3;
 }
 
 message ListBlobSequencesRequest {

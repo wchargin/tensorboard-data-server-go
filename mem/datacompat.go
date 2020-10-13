@@ -21,9 +21,10 @@ const runGraphName string = "__run_graph__"
 // TensorBoard plugin names; must agree with the `PLUGIN_NAME`s defined in
 // `tensorboard.plugin.*.metadata`.
 const (
-	graphsPluginName  = "graphs"
-	imagesPluginName  = "images"
-	scalarsPluginName = "scalars"
+	graphsPluginName     = "graphs"
+	histogramsPluginName = "histograms"
+	imagesPluginName     = "images"
+	scalarsPluginName    = "scalars"
 )
 
 // EventValues converts an on-disk event to the summary values that it
@@ -113,6 +114,37 @@ func migrateValueInPlace(v *spb.Summary_Value, initialMeta *spb.SummaryMetadata)
 				DataClass: spb.DataClass_DATA_CLASS_BLOB_SEQUENCE,
 			}
 		}
+	case *spb.Summary_Value_Histo:
+		h := what.Histo
+		n := len(h.Bucket)
+		if len(h.BucketLimit) < n {
+			n = len(h.BucketLimit)
+		}
+		buf := make([]float64, n*3)
+		tensor := &tpb.TensorProto{
+			Dtype:       dtpb.DataType_DT_DOUBLE,
+			TensorShape: &tspb.TensorShapeProto{Dim: []*tspb.TensorShapeProto_Dim{{Size: int64(n)}, {Size: 3}}},
+			DoubleVal:   buf,
+		}
+		if n > 0 {
+			lefts := append([]float64{h.Min}, h.BucketLimit[:n-1]...)
+			rights := append(h.BucketLimit[:n-1], h.Max)
+			counts := h.Bucket
+			for i := 0; i < n; i++ {
+				buf[3*i+0] = lefts[i]
+				buf[3*i+1] = rights[i]
+				buf[3*i+2] = counts[i]
+			}
+		}
+		v.Value = &spb.Summary_Value_Tensor{Tensor: tensor}
+		if initialMeta == nil {
+			v.Metadata = &spb.SummaryMetadata{
+				PluginData: &spb.SummaryMetadata_PluginData{
+					PluginName: histogramsPluginName,
+				},
+				DataClass: spb.DataClass_DATA_CLASS_TENSOR,
+			}
+		}
 	case *spb.Summary_Value_Tensor:
 		migrateTensorInPlace(v, what.Tensor, initialMeta)
 	default:
@@ -129,12 +161,16 @@ func migrateTensorInPlace(v *spb.Summary_Value, tensor *tpb.TensorProto, initial
 			v.Metadata.DataClass = spb.DataClass_DATA_CLASS_SCALAR
 		case imagesPluginName:
 			v.Metadata.DataClass = spb.DataClass_DATA_CLASS_BLOB_SEQUENCE
+		case histogramsPluginName:
+			v.Metadata.DataClass = spb.DataClass_DATA_CLASS_TENSOR
 		}
 	}
 	switch pluginName {
 	case scalarsPluginName:
 		// no transformations needed
 	case imagesPluginName:
+		// no transformations needed
+	case histogramsPluginName:
 		// no transformations needed
 	}
 }

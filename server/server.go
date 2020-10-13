@@ -150,6 +150,102 @@ func (s *Server) ReadScalars(ctx context.Context, req *dppb.ReadScalarsRequest) 
 	return res, nil
 }
 
+// ListTensors handles the ListTensors RPC.
+func (s *Server) ListTensors(ctx context.Context, req *dppb.ListTensorsRequest) (*dppb.ListTensorsResponse, error) {
+	res := new(dppb.ListTensorsResponse)
+	runFilter, tagFilter := filters(req.RunTagFilter)
+
+	for run, acc := range s.ll.Runs() {
+		if !matchesFilter(runFilter, run) {
+			continue
+		}
+		var tags []*dppb.ListTensorsResponse_TagEntry
+		for tag, md := range acc.List() {
+			if md == nil || md.DataClass != spb.DataClass_DATA_CLASS_TENSOR {
+				continue
+			}
+			if md.PluginData.GetPluginName() != req.PluginFilter.GetPluginName() {
+				continue
+			}
+			if !matchesFilter(tagFilter, tag) {
+				continue
+			}
+			sample := acc.Sample(tag)
+			if len(sample) == 0 {
+				// shouldn't happen, but don't panic
+				continue
+			}
+			last := sample[len(sample)-1]
+			e := &dppb.ListTensorsResponse_TagEntry{
+				TagName: tag,
+				TimeSeries: &dppb.TensorTimeSeries{
+					MaxStep:         int64(last.EventStep),
+					MaxWallTime:     maxWallTime(sample),
+					SummaryMetadata: md,
+				},
+			}
+			tags = append(tags, e)
+		}
+		if tags != nil {
+			e := &dppb.ListTensorsResponse_RunEntry{
+				RunName: run,
+				Tags:    tags,
+			}
+			res.Runs = append(res.Runs, e)
+		}
+	}
+	return res, nil
+}
+
+// ReadTensors handles the ReadTensors RPC.
+func (s *Server) ReadTensors(ctx context.Context, req *dppb.ReadTensorsRequest) (*dppb.ReadTensorsResponse, error) {
+	res := new(dppb.ReadTensorsResponse)
+	runFilter, tagFilter := filters(req.RunTagFilter)
+
+	for run, acc := range s.ll.Runs() {
+		if !matchesFilter(runFilter, run) {
+			continue
+		}
+		var tags []*dppb.ReadTensorsResponse_TagEntry
+		for tag, md := range acc.List() {
+			if md == nil || md.DataClass != spb.DataClass_DATA_CLASS_TENSOR {
+				continue
+			}
+			if md.PluginData.GetPluginName() != req.PluginFilter.GetPluginName() {
+				continue
+			}
+			if !matchesFilter(tagFilter, tag) {
+				continue
+			}
+			sample := acc.Sample(tag)
+			data := dppb.TensorData{
+				Step:     make([]int64, len(sample)),
+				WallTime: make([]float64, len(sample)),
+				Value:    make([]*tpb.TensorProto, len(sample)),
+			}
+			// TODO(@wchargin): Re-downsample.
+			for i, x := range sample {
+				data.Step[i] = int64(x.EventStep)
+				data.WallTime[i] = x.EventWallTime
+				data.Value[i] = x.Value.GetTensor()
+			}
+			e := &dppb.ReadTensorsResponse_TagEntry{
+				TagName: tag,
+				Data:    &data,
+			}
+			tags = append(tags, e)
+		}
+		if tags != nil {
+			e := &dppb.ReadTensorsResponse_RunEntry{
+				RunName: run,
+				Tags:    tags,
+			}
+			res.Runs = append(res.Runs, e)
+		}
+	}
+	return res, nil
+}
+
 // ListBlobSequences handles the ListBlobSequences RPC.
 func (s *Server) ListBlobSequences(ctx context.Context, req *dppb.ListBlobSequencesRequest) (*dppb.ListBlobSequencesResponse, error) {
 	res := new(dppb.ListBlobSequencesResponse)
