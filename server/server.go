@@ -105,6 +105,10 @@ func (s *Server) ListScalars(ctx context.Context, req *dppb.ListScalarsRequest) 
 func (s *Server) ReadScalars(ctx context.Context, req *dppb.ReadScalarsRequest) (*dppb.ReadScalarsResponse, error) {
 	res := new(dppb.ReadScalarsResponse)
 	runFilter, tagFilter := filters(req.RunTagFilter)
+	numPoints := int(req.Downsample.GetNumPoints())
+	if numPoints < 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "downsample.num_points: want non-negative, got %v", numPoints)
+	}
 
 	for run, acc := range s.ll.Runs() {
 		if !matchesFilter(runFilter, run) {
@@ -121,13 +125,12 @@ func (s *Server) ReadScalars(ctx context.Context, req *dppb.ReadScalarsRequest) 
 			if !matchesFilter(tagFilter, tag) {
 				continue
 			}
-			sample := acc.Sample(tag)
+			sample := downsampleValueData(acc.Sample(tag), numPoints)
 			data := dppb.ScalarData{
 				Step:     make([]int64, len(sample)),
 				WallTime: make([]float64, len(sample)),
 				Value:    make([]float64, len(sample)),
 			}
-			// TODO(@wchargin): Re-downsample.
 			for i, x := range sample {
 				data.Step[i] = int64(x.EventStep)
 				data.WallTime[i] = x.EventWallTime
@@ -201,6 +204,10 @@ func (s *Server) ListTensors(ctx context.Context, req *dppb.ListTensorsRequest) 
 func (s *Server) ReadTensors(ctx context.Context, req *dppb.ReadTensorsRequest) (*dppb.ReadTensorsResponse, error) {
 	res := new(dppb.ReadTensorsResponse)
 	runFilter, tagFilter := filters(req.RunTagFilter)
+	numPoints := int(req.Downsample.GetNumPoints())
+	if numPoints < 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "downsample.num_points: want non-negative, got %v", numPoints)
+	}
 
 	for run, acc := range s.ll.Runs() {
 		if !matchesFilter(runFilter, run) {
@@ -217,13 +224,12 @@ func (s *Server) ReadTensors(ctx context.Context, req *dppb.ReadTensorsRequest) 
 			if !matchesFilter(tagFilter, tag) {
 				continue
 			}
-			sample := acc.Sample(tag)
+			sample := downsampleValueData(acc.Sample(tag), numPoints)
 			data := dppb.TensorData{
 				Step:     make([]int64, len(sample)),
 				WallTime: make([]float64, len(sample)),
 				Value:    make([]*tpb.TensorProto, len(sample)),
 			}
-			// TODO(@wchargin): Re-downsample.
 			for i, x := range sample {
 				data.Step[i] = int64(x.EventStep)
 				data.WallTime[i] = x.EventWallTime
@@ -298,6 +304,10 @@ func (s *Server) ListBlobSequences(ctx context.Context, req *dppb.ListBlobSequen
 func (s *Server) ReadBlobSequences(ctx context.Context, req *dppb.ReadBlobSequencesRequest) (*dppb.ReadBlobSequencesResponse, error) {
 	res := new(dppb.ReadBlobSequencesResponse)
 	runFilter, tagFilter := filters(req.RunTagFilter)
+	numPoints := int(req.Downsample.GetNumPoints())
+	if numPoints < 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "downsample.num_points: want non-negative, got %v", numPoints)
+	}
 
 	for run, acc := range s.ll.Runs() {
 		if !matchesFilter(runFilter, run) {
@@ -476,4 +486,16 @@ func maxLength(ds []run.ValueDatum) int64 {
 		}
 	}
 	return result
+}
+
+func downsampleValueData(sample []run.ValueDatum, k int) []run.ValueDatum {
+	dstSize := k
+	if dstSize > len(sample) {
+		dstSize = len(sample)
+	}
+	dst := make([]run.ValueDatum, dstSize)
+	downsample(len(sample), dstSize, func(i, j int) {
+		dst[j] = sample[i]
+	})
+	return dst
 }
